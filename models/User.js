@@ -12,7 +12,7 @@ const userSchema = new mongoose.Schema({
         unique: true,
         lowercase: true,
     },
-    id: {
+    _id: {
         type: String,
         required: true,
         unique: true,
