@@ -4,7 +4,10 @@ import User from "@/models/User";
 
 
 // Create a client to send and receive events
-export const inngest = new Inngest({ id: "quickCart" });
+export const inngest = new Inngest({
+    id: "quickCart",
+    signingKey: process.env.INNGEST_SIGNING_KEY,
+});
 
 export const syncUserCreation = inngest.createFunction(
     { id: "sync-user-from-clerk" },
