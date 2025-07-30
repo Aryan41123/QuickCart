@@ -18,7 +18,7 @@ const userSchema = new mongoose.Schema({
         unique: true,
     },
     cartItem: {
-        type: Object, required: true
+        type: Object, default:{}
     },
     imageUrl: {
         type: String, required: true
