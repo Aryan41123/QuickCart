@@ -1,93 +1,64 @@
 import { Inngest } from "inngest";
-import connectDB from "./db.js";
-import User from "@/models/User.js";
+import connectDB from "./db";
+import User from "@/models/User";
 
-// Create Inngest client
-export const inngest = new Inngest({
-  id: "quickCart",
-});
 
-// Helper to extract user data safely
-function extractUserData(data) {
-  const {
-    id,
-    first_name,
-    last_name,
-    image_url,
-    email_addresses = [],
-  } = data;
+// Create a client to send and receive events
+export const inngest = new Inngest({ id: "quickCart" });
 
-  const email = email_addresses[0]?.email_address || "unknown@example.com";
-  const fallbackName = email.split("@")[0];
+export const syncUserCreation = inngest.createFunction({
+    id: "sync-user-from-clerk"
+},
+    {
+        event: "clerk/user.created"
+    }, async ({ event }) => {
+        const { id, first_name, last_name, email_address, image_url, email_addresses } = event.data
 
-  return {
-    _id: id,
-    email,
-    name: ((first_name || "") + " " + (last_name || "")).trim() || fallbackName,
-    imageUrl: image_url,
-  };
-}
-
-// CREATE user function
-export const syncUserCreation = inngest.createFunction(
-  { id: "sync-user-from-clerk" },
-  { event: "clerk/user.created" },
-  async ({ event }) => {
-    try {
-      const userData = extractUserData(event.data);
-      await connectDB();
-
-      const createdUser = await User.create({
-        ...userData,
-        cartItem: {},
-      });
-
-      console.log("✅ User created:", createdUser._id);
-    } catch (error) {
-      console.error("❌ Error in user creation:", error);
+        const userData = {
+            _id: id,
+            email: email_addresses[0].email_address,
+            name: first_name + " " + last_name,
+            imageUrl: image_url
+        }
+        await connectDB();
+        await User.create(userData)
     }
-  }
-);
 
-// UPDATE user function
+)
+
 export const syncUsersUpdation = inngest.createFunction(
-  { id: "update-user-from-clerk" },
-  { event: "clerk/user.updated" },
-  async ({ event }) => {
-    try {
-      const userData = extractUserData(event.data);
-      await connectDB();
-
-      const updatedUser = await User.findByIdAndUpdate(userData._id, userData, {
-        new: true,
-        upsert: true,
-      });
-
-      console.log("✏️ User updated:", updatedUser._id);
-    } catch (error) {
-      console.error("❌ Error updating user:", error);
+    {
+        id: "update-user-from-clerk"
+    },
+    { event: "clerk/user.updated" },
+    async ({ event }) => {
+        const { id, first_name, last_name, email_address, image_url, email_addresses } = event.data
+        const userData = {
+            _id: id,
+            email: email_addresses[0].email_address,
+            name: first_name + " " + last_name,
+            imageUrl: image_url
+        }
+        await connectDB();
+        await User.findByIdAndUpdate(id, userData)
     }
-  }
-);
 
-// DELETE user function
+)
+
 export const syncUserDeletion = inngest.createFunction(
-  { id: "delete-user-from-clerk" },
-  { event: "clerk/user.deleted" },
-  async ({ event }) => {
-    try {
-      const { id } = event.data;
-      await connectDB();
+    { id: "delete-user-from-clerk" },
+    { event: "clerk/user.deleted" },
+    async ({ event }) => {
+        const { id } = event.data;
 
-      const deletedUser = await User.findByIdAndDelete(id);
+        await connectDB();
 
-      if (!deletedUser) {
-        console.warn(`⚠️ User ${id} not found.`);
-      } else {
-        console.log(`🗑️ User ${id} deleted.`);
-      }
-    } catch (error) {
-      console.error("❌ Error deleting user:", error);
+        const deletedUser = await User.findByIdAndDelete(id);
+
+        if (!deletedUser) {
+            console.warn(`User with ID ${id} not found or already deleted.`);
+        } else {
+            console.log(`User ${id} deleted successfully.`);
+        }
     }
-  }
 );

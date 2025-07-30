@@ -11,5 +11,3 @@ const handler = serve({
   ]
 });
 
-export const { GET, POST, PUT } = handler;
-export default handler; // ✅ VERY IMPORTANT for Inngest CLI
