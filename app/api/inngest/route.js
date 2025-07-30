@@ -1,7 +1,8 @@
+// app/api/inngest/route.ts
 import { serve } from "inngest/next";
 import { inngest, syncUserCreation, syncUserDeletion, syncUsersUpdation } from "@/config/inngest";
 
-export const { GET, POST, PUT } = serve({
+const handler = serve({
   client: inngest,
   functions: [
     syncUserCreation,
@@ -9,3 +10,6 @@ export const { GET, POST, PUT } = serve({
     syncUsersUpdation
   ]
 });
+
+export const { GET, POST, PUT } = handler;
+export default handler; // ✅ VERY IMPORTANT for Inngest CLI

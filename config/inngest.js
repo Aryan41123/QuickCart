@@ -1,75 +1,93 @@
 import { Inngest } from "inngest";
-import connectDB from "./db";
-import User from "@/models/User";
+import connectDB from "./db.js";
+import User from "@/models/User.js";
 
-
-// Create a client to send and receive events
+// Create Inngest client
 export const inngest = new Inngest({
-    id: "quickCart",
-    signingKey: process.env.INNGEST_SIGNING_KEY,
+  id: "quickCart",
 });
 
+// Helper to extract user data safely
+function extractUserData(data) {
+  const {
+    id,
+    first_name,
+    last_name,
+    image_url,
+    email_addresses = [],
+  } = data;
+
+  const email = email_addresses[0]?.email_address || "unknown@example.com";
+  const fallbackName = email.split("@")[0];
+
+  return {
+    _id: id,
+    email,
+    name: ((first_name || "") + " " + (last_name || "")).trim() || fallbackName,
+    imageUrl: image_url,
+  };
+}
+
+// CREATE user function
 export const syncUserCreation = inngest.createFunction(
-    { id: "sync-user-from-clerk" },
-    { event: "clerk/user.created" },
-    async ({ event }) => {
-        try {
-            const { id, first_name, last_name, email_addresses, image_url } = event.data;
-            const email = email_addresses[0]?.email_address || "unknown@example.com";
+  { id: "sync-user-from-clerk" },
+  { event: "clerk/user.created" },
+  async ({ event }) => {
+    try {
+      const userData = extractUserData(event.data);
+      await connectDB();
 
-            const fallbackName = email.split("@")[0]; // fallback to email username if name is null
+      const createdUser = await User.create({
+        ...userData,
+        cartItem: {},
+      });
 
-            const userData = {
-                _id: id,
-                email: email,
-                name: ((first_name || "") + " " + (last_name || "")).trim() || fallbackName,
-                imageUrl: image_url,
-                cartItem: {},
-            };
-
-            await connectDB();
-            const createdUser = await User.create(userData);
-            console.log("✅ User created:", createdUser._id);
-        } catch (error) {
-            console.error("❌ Error in user creation:", error);
-        }
+      console.log("✅ User created:", createdUser._id);
+    } catch (error) {
+      console.error("❌ Error in user creation:", error);
     }
+  }
 );
 
-
+// UPDATE user function
 export const syncUsersUpdation = inngest.createFunction(
-    {
-        id: "update-user-from-clerk"
-    },
-    { event: "clerk/user.updated" },
-    async ({ event }) => {
-        const { id, first_name, last_name, email_address, image_url, email_addresses } = event.data
-        const userData = {
-            _id: id,
-            email: email_addresses[0].email_address,
-            name: first_name + " " + last_name,
-            imageUrl: image_url
-        }
-        await connectDB();
-        await User.findByIdAndUpdate(id, userData)
+  { id: "update-user-from-clerk" },
+  { event: "clerk/user.updated" },
+  async ({ event }) => {
+    try {
+      const userData = extractUserData(event.data);
+      await connectDB();
+
+      const updatedUser = await User.findByIdAndUpdate(userData._id, userData, {
+        new: true,
+        upsert: true,
+      });
+
+      console.log("✏️ User updated:", updatedUser._id);
+    } catch (error) {
+      console.error("❌ Error updating user:", error);
     }
+  }
+);
 
-)
-
+// DELETE user function
 export const syncUserDeletion = inngest.createFunction(
-    { id: "delete-user-from-clerk" },
-    { event: "clerk/user.deleted" },
-    async ({ event }) => {
-        const { id } = event.data;
+  { id: "delete-user-from-clerk" },
+  { event: "clerk/user.deleted" },
+  async ({ event }) => {
+    try {
+      const { id } = event.data;
+      await connectDB();
 
-        await connectDB();
+      const deletedUser = await User.findByIdAndDelete(id);
 
-        const deletedUser = await User.findByIdAndDelete(id);
-
-        if (!deletedUser) {
-            console.warn(`User with ID ${id} not found or already deleted.`);
-        } else {
-            console.log(`User ${id} deleted successfully.`);
-        }
+      if (!deletedUser) {
+        console.warn(`⚠️ User ${id} not found.`);
+      } else {
+        console.log(`🗑️ User ${id} deleted.`);
+      }
+    } catch (error) {
+      console.error("❌ Error deleting user:", error);
     }
+  }
 );
